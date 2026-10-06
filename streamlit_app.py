@@ -72,7 +72,8 @@ if not st.session_state.authenticated:
     st.stop()
 
 # Header Panel
-header_col1, header_col2 = st.columns()
+# Fixed: Pass an integer or an array to define columns layout
+header_col1, header_col2 = st.columns([4, 1])
 with header_col1:
     st.title("🏭 Secure Production & Downtime Dashboard")
     st.caption(f"Logged in as: **{st.session_state.username.upper()}** | Role: **{st.session_state.user_role.capitalize()}**")
