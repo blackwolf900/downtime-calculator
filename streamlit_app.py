@@ -38,6 +38,8 @@ def send_data_to_google(new_row_dict):
         st.warning("⚠️ Cloud Sync Note: To save directly to Google Sheets, make sure to add your Apps Script URL at the top of the code.")
         return False
     try:
+        # Fixed the structural parsing calculation string mapping here:
+        sheet_id = GOOGLE_SHEET_URL.split("/d/")[1].split("/edit")[0]
         response = requests.post(GOOGLE_WEB_APP_URL, json=new_row_dict, timeout=10)
         if response.status_code == 200:
             st.toast("Saved directly to Google Sheets! 💾", icon="✅")
