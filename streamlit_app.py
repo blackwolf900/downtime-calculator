@@ -16,7 +16,7 @@ GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz2ePknPsjK6YLxVIh
 
 USER_CREDENTIALS = {
     "Wendy": {"password": "Pa55w.rd", "role": "operator"},
-    "admin": {"password": "Pa55w.rd", "role": "manager"}
+    "Admin": {"password": "Pa55w.rd", "role": "manager"}
 }
 
 # 2. Helper Functions to Sync data with Google Sheets
