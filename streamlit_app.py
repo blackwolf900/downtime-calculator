@@ -24,7 +24,6 @@ def load_permanent_data():
     try:
         csv_url = GOOGLE_SHEET_URL.replace("/edit?usp=sharing", "/export?format=csv")
         df = pd.read_csv(csv_url)
-        # Ensure correct datatypes for math calculation metrics
         numeric_cols = ["Elapsed Hours", "Elapsed Mins", "Actual Bundles", "Expected Bundles", "Downtime Mins"]
         for col in numeric_cols:
             if col in df.columns:
@@ -38,8 +37,6 @@ def send_data_to_google(new_row_dict):
         st.warning("⚠️ Cloud Sync Note: To save directly to Google Sheets, make sure to add your Apps Script URL at the top of the code.")
         return False
     try:
-        # Fixed the structural parsing calculation string mapping here:
-        sheet_id = GOOGLE_SHEET_URL.split("/d/")[1].split("/edit")[0]
         response = requests.post(GOOGLE_WEB_APP_URL, json=new_row_dict, timeout=10)
         if response.status_code == 200:
             st.toast("Saved directly to Google Sheets! 💾", icon="✅")
@@ -50,7 +47,6 @@ def send_data_to_google(new_row_dict):
     except Exception as e:
         st.error(f"Cloud connection failed: {e}")
         return False
-
 
 # 3. Auth Engine Setup
 if "authenticated" not in st.session_state:
@@ -101,14 +97,12 @@ else:
 if not combined_df.empty:
     st.subheader("📊 Live Production Performance Metrics")
     
-    # Summary KPI Cards
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
     total_hours = combined_df["Elapsed Hours"].sum()
     total_actual = combined_df["Actual Bundles"].sum()
     total_expected = combined_df["Expected Bundles"].sum()
     total_downtime = combined_df["Downtime Mins"].sum()
     
-    # Calculate global efficiency
     plant_efficiency = (total_actual / total_expected * 100) if total_expected > 0 else 0
     
     with kpi_col1:
@@ -120,12 +114,10 @@ if not combined_df.empty:
     with kpi_col4:
         st.metric("Overall Plant Efficiency", f"{plant_efficiency:.1f}%")
         
-    # Graphical Charts Row
     graph_col1, graph_col2 = st.columns(2)
     
     with graph_col1:
         st.markdown("#### ⏳ Accumulated Downtime Minutes by Production Line")
-        # Sum up total downtime grouping by production lines (CP01, CP02, etc.)
         downtime_summary = combined_df.groupby("Line", as_index=False)["Downtime Mins"].sum()
         
         fig_bar = px.bar(
@@ -142,14 +134,13 @@ if not combined_df.empty:
         
     with graph_col2:
         st.markdown("#### 📈 Actual vs. Expected Production Bundles by Shift")
-        # Aggregate performance values per industrial plant shift group
         shift_summary = combined_df.groupby("Shift", as_index=False)[["Actual Bundles", "Expected Bundles"]].sum()
         
         fig_group = go.Figure()
         fig_group.add_trace(go.Bar(name='Actual Bundles', x=shift_summary['Shift'], y=shift_summary['Actual Bundles'], marker_color='#2ca02c'))
         fig_group.add_trace(go.Bar(name='Expected Target', x=shift_summary['Shift'], y=shift_summary['Expected Bundles'], marker_color='#d62728'))
         
-        fig_group.update_layout(barmode='group', height=350, margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig_group.update_layout(barmode='group', height=350, margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", yanchor="bottom", y=102, xanchor="right", x=1))
         st.plotly_chart(fig_group, use_container_width=True)
         
     st.divider()
@@ -174,7 +165,7 @@ with col_input2:
 if st.button("Submit & Calculate Data", type="primary"):
     elapsed_minutes = (input_hours * 60) + input_minutes
     elapsed_hours_decimal = elapsed_minutes / 60.0
-    expected_bundles = elapsed_minutes * 1.0 # Standard calibration metrics target ratio
+    expected_bundles = elapsed_minutes * 1.0
     
     if actual_bundles > expected_bundles:
         st.error(f"❌ Error: Actual bundles ({actual_bundles}) exceed capacity for this timeframe.")
@@ -196,7 +187,6 @@ if st.button("Submit & Calculate Data", type="primary"):
             "Downtime Mins": int(downtime_minutes)
         }
         
-        # Push row immediately directly into connected Cloud API Web App infrastructure
         sync_success = send_data_to_google(new_entry)
         
         if "local_backup" not in st.session_state:
@@ -211,26 +201,23 @@ st.subheader("📊 Live Connected Production Database Ledger")
 st.dataframe(combined_df, use_container_width=True, hide_index=True)
 
 # Manager Dashboard controls
-    # Manager Dashboard controls
-    if st.session_state.user_role == "manager":
-        st.subheader("🔐 Management Administrative Control Panel")
-        
-        buffer = io.BytesIO()
-        # Explicitly writing out the complete context management loop:
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            combined_df.to_excel(writer, index=False, sheet_name='Plant Overview Summary')
-        
-        act_col1, act_col2 = st.columns(2)
-        with act_col1:
-            st.download_button(
-                label="📥 Download Consolidated Report (.xlsx)",
-                data=buffer.getvalue(),
-                file_name="permanent_production_summary.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        with act_col2:
-            if st.button("⚠️ Clear Session Ledger Cache", type="secondary", use_container_width=True):
-                st.session_state.local_backup = []
-                st.rerun()
-
+if st.session_state.user_role == "manager":
+    st.subheader("🔐 Management Administrative Control Panel")
+    
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        combined_df.to_excel(writer, index=False, sheet_name='Plant Overview Summary')
+    
+    act_col1, act_col2 = st.columns(2)
+    with act_col1:
+        st.download_button(
+            label="📥 Download Consolidated Report (.xlsx)",
+            data=buffer.getvalue(),
+            file_name="permanent_production_summary.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    with act_col2:
+        if st.button("⚠️ Clear Session Ledger Cache", type="secondary", use_container_width=True):
+            st.session_state.local_backup = []
+            st.rerun()
