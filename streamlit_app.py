@@ -3,15 +3,15 @@ import pandas as pd
 import io
 import datetime
 import requests
+import plotly.express as px
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Secure Production Log", page_icon="🏭", layout="wide")
 
 # 1. Configuration & Security Setup
-# Your permanent Google Sheet tracking database link
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1gV2JAoaXqc0v5ClRlGmuGihExakxwrLQOOmlCxNwpAs/edit?usp=sharing"
 
-# IMPORTANT: Deploy a Google Apps Script as a Web App from your sheet and paste its URL here
-# This connects your Streamlit app directly to your persistent Google Sheet database rows
+# PASTE YOUR COPIED GOOGLE APPS SCRIPT WEB APP URL HERE:
 GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz2ePknPsjK6YLxVIh7mMolJ_H-wKazZSKLBK2Y5KNjAZnaGZWUSGtiXiTZf3yF8kYJ/exec"
 
 USER_CREDENTIALS = {
@@ -22,11 +22,15 @@ USER_CREDENTIALS = {
 # 2. Helper Functions to Sync data with Google Sheets
 def load_permanent_data():
     try:
-        # Converts standard web link into an export format to pull down live rows
         csv_url = GOOGLE_SHEET_URL.replace("/edit?usp=sharing", "/export?format=csv")
-        return pd.read_csv(csv_url)
+        df = pd.read_csv(csv_url)
+        # Ensure correct datatypes for math calculation metrics
+        numeric_cols = ["Elapsed Hours", "Elapsed Mins", "Actual Bundles", "Expected Bundles", "Downtime Mins"]
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        return df
     except Exception:
-        # Fall back to base structure matching your precise column headers
         return pd.DataFrame(columns=["Timestamp", "Line", "Shift", "Logged By", "Elapsed Hours", "Elapsed Mins", "Actual Bundles", "Expected Bundles", "Downtime Mins"])
 
 def send_data_to_google(new_row_dict):
@@ -34,7 +38,6 @@ def send_data_to_google(new_row_dict):
         st.warning("⚠️ Cloud Sync Note: To save directly to Google Sheets, make sure to add your Apps Script URL at the top of the code.")
         return False
     try:
-        # Send data payload securely to the Google Sheets backend web app pipeline
         response = requests.post(GOOGLE_WEB_APP_URL, json=new_row_dict, timeout=10)
         if response.status_code == 200:
             st.toast("Saved directly to Google Sheets! 💾", icon="✅")
@@ -75,7 +78,7 @@ with header_col1:
     st.title("🏭 Secure Production & Downtime Dashboard")
     st.caption(f"Logged in as: **{st.session_state.username.upper()}** | Role: **{st.session_state.user_role.capitalize()}**")
 with header_col2:
-    if st.button("Log Out", type="secondary"):
+    if st.button("Log Out", type="secondary", use_container_width=True):
         st.session_state.authenticated = False
         st.rerun()
 
@@ -84,7 +87,71 @@ st.divider()
 # Pull live logs from permanent database
 db_df = load_permanent_data()
 
-# 4. Input Portal Layout
+# Combine cloud records with local session entries dynamically
+if "local_backup" in st.session_state and st.session_state.local_backup:
+    session_df = pd.DataFrame(st.session_state.local_backup)
+    combined_df = pd.concat([session_df, db_df], ignore_index=True).drop_duplicates(subset=["Timestamp", "Line", "Shift", "Logged By"], keep="first")
+else:
+    combined_df = db_df
+
+# 4. Interactive Analytics Panel (Visual Metric Charts)
+if not combined_df.empty:
+    st.subheader("📊 Live Production Performance Metrics")
+    
+    # Summary KPI Cards
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    total_hours = combined_df["Elapsed Hours"].sum()
+    total_actual = combined_df["Actual Bundles"].sum()
+    total_expected = combined_df["Expected Bundles"].sum()
+    total_downtime = combined_df["Downtime Mins"].sum()
+    
+    # Calculate global efficiency
+    plant_efficiency = (total_actual / total_expected * 100) if total_expected > 0 else 0
+    
+    with kpi_col1:
+        st.metric("Total Operational Time", f"{total_hours:.1f} Hrs")
+    with kpi_col2:
+        st.metric("Actual Bundles Produced", f"{int(total_actual):,}")
+    with kpi_col3:
+        st.metric("Total Lost Production Time", f"{int(total_downtime):,} Mins", delta=f"{int(total_downtime)} mins delay", delta_color="inverse")
+    with kpi_col4:
+        st.metric("Overall Plant Efficiency", f"{plant_efficiency:.1f}%")
+        
+    # Graphical Charts Row
+    graph_col1, graph_col2 = st.columns(2)
+    
+    with graph_col1:
+        st.markdown("#### ⏳ Accumulated Downtime Minutes by Production Line")
+        # Sum up total downtime grouping by production lines (CP01, CP02, etc.)
+        downtime_summary = combined_df.groupby("Line", as_index=False)["Downtime Mins"].sum()
+        
+        fig_bar = px.bar(
+            downtime_summary, 
+            x="Line", 
+            y="Downtime Mins", 
+            text_auto=True,
+            color="Line",
+            color_discrete_sequence=px.colors.qualitative.Safe,
+            labels={"Downtime Mins": "Downtime (Minutes)", "Line": "Production Line"}
+        )
+        fig_bar.update_layout(showlegend=False, height=350, margin=dict(t=10, b=10, l=10, r=10))
+        st.plotly_chart(fig_bar, use_container_width=True)
+        
+    with graph_col2:
+        st.markdown("#### 📈 Actual vs. Expected Production Bundles by Shift")
+        # Aggregate performance values per industrial plant shift group
+        shift_summary = combined_df.groupby("Shift", as_index=False)[["Actual Bundles", "Expected Bundles"]].sum()
+        
+        fig_group = go.Figure()
+        fig_group.add_trace(go.Bar(name='Actual Bundles', x=shift_summary['Shift'], y=shift_summary['Actual Bundles'], marker_color='#2ca02c'))
+        fig_group.add_trace(go.Bar(name='Expected Target', x=shift_summary['Shift'], y=shift_summary['Expected Bundles'], marker_color='#d62728'))
+        
+        fig_group.update_layout(barmode='group', height=350, margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        st.plotly_chart(fig_group, use_container_width=True)
+        
+    st.divider()
+
+# 5. Input Portal Layout
 st.subheader("📥 Log New Shift Performance Data")
 col_input1, col_input2 = st.columns(2)
 
@@ -93,7 +160,6 @@ with col_input1:
     shift_name = st.selectbox("Select Shift", options=["A", "B", "C", "D"])
 
 with col_input2:
-    # Cleaner side-by-side time configuration field
     time_col1, time_col2 = st.columns(2)
     with time_col1:
         input_hours = st.number_input("Elapsed Hours", min_value=0, value=1, step=1)
@@ -103,10 +169,9 @@ with col_input2:
     actual_bundles = st.number_input("Actual Bundles Produced", min_value=0, value=10, step=1)
 
 if st.button("Submit & Calculate Data", type="primary"):
-    # Unified math conversions preserving standard calculation dependencies
     elapsed_minutes = (input_hours * 60) + input_minutes
     elapsed_hours_decimal = elapsed_minutes / 60.0
-    expected_bundles = elapsed_minutes * 1.0
+    expected_bundles = elapsed_minutes * 1.0 # Standard calibration metrics target ratio
     
     if actual_bundles > expected_bundles:
         st.error(f"❌ Error: Actual bundles ({actual_bundles}) exceed capacity for this timeframe.")
@@ -116,7 +181,6 @@ if st.button("Submit & Calculate Data", type="primary"):
         downtime_minutes = elapsed_minutes - actual_bundles
         current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Structure payload package precisely aligning with spreadsheet structural schema
         new_entry = {
             "Timestamp": current_time_str,
             "Line": line_name,
@@ -129,10 +193,9 @@ if st.button("Submit & Calculate Data", type="primary"):
             "Downtime Mins": int(downtime_minutes)
         }
         
-        # Push to Google Sheet Cloud Webhook API endpoint
+        # Push row immediately directly into connected Cloud API Web App infrastructure
         sync_success = send_data_to_google(new_entry)
         
-        # Keep local backup tracking frame active inside runtime memory for immediate viewing
         if "local_backup" not in st.session_state:
             st.session_state.local_backup = []
         st.session_state.local_backup.append(new_entry)
@@ -140,17 +203,8 @@ if st.button("Submit & Calculate Data", type="primary"):
         st.success("Production metrics calculated and submitted successfully!")
         st.rerun()
 
-# 5. Continuous Visual Ledger
-st.divider()
+# 6. Continuous Data Ledger
 st.subheader("📊 Live Connected Production Database Ledger")
-
-# Combine permanent online history rows with any fresh session entries for a fluid view
-if "local_backup" in st.session_state and st.session_state.local_backup:
-    session_df = pd.DataFrame(st.session_state.local_backup)
-    combined_df = pd.concat([session_df, db_df], ignore_index=True).drop_duplicates(subset=["Timestamp", "Line", "Shift", "Logged By"], keep="first")
-else:
-    combined_df = db_df
-
 st.dataframe(combined_df, use_container_width=True, hide_index=True)
 
 # Manager Dashboard controls
@@ -167,10 +221,3 @@ if st.session_state.user_role == "manager":
             label="📥 Download Consolidated Report (.xlsx)",
             data=buffer.getvalue(),
             file_name="permanent_production_summary.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-    with act_col2:
-        if st.button("⚠️ Clear Session Ledger Cache", type="secondary", use_container_width=True):
-            st.session_state.local_backup = []
-            st.rerun()
