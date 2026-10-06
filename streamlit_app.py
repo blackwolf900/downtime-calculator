@@ -81,24 +81,35 @@ with col_input1:
     shift_name = st.selectbox("Select Shift", options=["A", "B", "C", "D"])
 
 with col_input2:
-    elapsed_hours = st.number_input("Elapsed Time (Hours)", min_value=0.1, value=1.0, step=0.5, format="%.2f")
+    # Split time input layout cleanly using sub-columns
+    time_col1, time_col2 = st.columns(2)
+    with time_col1:
+        input_hours = st.number_input("Elapsed Hours", min_value=0, value=1, step=1)
+    with time_col2:
+        input_minutes = st.number_input("Elapsed Minutes", min_value=0, max_value=59, value=0, step=1)
+        
     actual_bundles = st.number_input("Actual Bundles Produced", min_value=0, value=10, step=1)
 
 if st.button("Submit & Calculate Data", type="primary"):
-    elapsed_minutes = elapsed_hours * 60.0
+    # Calculate unified running time parameters from split fields
+    elapsed_minutes = (input_hours * 60.0) + input_minutes
+    elapsed_hours_decimal = elapsed_minutes / 60.0
+    
     expected_bundles = elapsed_minutes * 1.0
     
     if actual_bundles > expected_bundles:
         st.error(f"❌ Error: Actual bundles ({actual_bundles}) exceed capability.")
+    elif elapsed_minutes == 0:
+        st.error("❌ Error: Total elapsed time cannot be zero.")
     else:
         downtime_minutes = elapsed_minutes - actual_bundles
         
-        # Structure the payload data package
+        # Structure the payload data package matching your database structure
         new_entry = {
             "Line": line_name,
             "Shift": shift_name,
             "Logged By": st.session_state.username,
-            "Elapsed Hours": elapsed_hours,
+            "Elapsed Hours": round(elapsed_hours_decimal, 2),
             "Elapsed Mins": int(elapsed_minutes),
             "Actual Bundles": actual_bundles,
             "Expected Bundles": int(expected_bundles),
@@ -143,5 +154,3 @@ if "local_backup" in st.session_state and st.session_state.local_backup:
             if st.button("⚠️ Clear Data Log", type="secondary", use_container_width=True):
                 st.session_state.local_backup = []
                 st.rerun()
-
-
