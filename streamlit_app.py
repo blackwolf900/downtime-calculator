@@ -9,8 +9,8 @@ st.set_page_config(page_title="Secure Production Log", page_icon="🏭", layout=
 GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1gV2JAoaXqc0v5ClRlGmuGihExakxwrLQOOmlCxNwpAs/edit?usp=sharing"
 
 USER_CREDENTIALS = {
-    "operator1": {"password": "OpPassword123", "role": "operator"},
-    "manager1": {"password": "MgrPassword456", "role": "manager"}
+    "operator1": {"password": "Pa55w.rd", "role": "operator"},
+    "manager1": {"password": "Pa55w.rd", "role": "manager"}
 }
 
 # 2. Helper Functions to Sync data with Google Sheets CSV Engine
