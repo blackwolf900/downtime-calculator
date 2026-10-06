@@ -211,16 +211,26 @@ st.subheader("📊 Live Connected Production Database Ledger")
 st.dataframe(combined_df, use_container_width=True, hide_index=True)
 
 # Manager Dashboard controls
-if st.session_state.user_role == "manager":
-    st.subheader("🔐 Management Administrative Control Panel")
-    
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        combined_df.to_excel(writer, index=False, sheet_name='Plant Overview Summary')
-    
-    act_col1, act_col2 = st.columns(2)
-    with act_col1:
-        st.download_button(
-            label="📥 Download Consolidated Report (.xlsx)",
-            data=buffer.getvalue(),
-            file_name="permanent_production_summary.xlsx",
+    # Manager Dashboard controls
+    if st.session_state.user_role == "manager":
+        st.subheader("🔐 Management Administrative Control Panel")
+        
+        buffer = io.BytesIO()
+        # Explicitly writing out the complete context management loop:
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            combined_df.to_excel(writer, index=False, sheet_name='Plant Overview Summary')
+        
+        act_col1, act_col2 = st.columns(2)
+        with act_col1:
+            st.download_button(
+                label="📥 Download Consolidated Report (.xlsx)",
+                data=buffer.getvalue(),
+                file_name="permanent_production_summary.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        with act_col2:
+            if st.button("⚠️ Clear Session Ledger Cache", type="secondary", use_container_width=True):
+                st.session_state.local_backup = []
+                st.rerun()
+
