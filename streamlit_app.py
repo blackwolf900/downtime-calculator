@@ -222,4 +222,4 @@ if st.session_state.user_role == "manager":
         st.download_button(
             label="📥 Download Consolidated Report (.xlsx)",
             data=buffer.getvalue(),
-            file_name="permanent_production_summary.xlsx",
+            file_name="permanent_production_summary.xlsx",)
