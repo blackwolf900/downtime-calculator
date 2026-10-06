@@ -15,8 +15,8 @@ GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1gV2JAoaXqc0v5ClRlGmu
 GOOGLE_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz2ePknPsjK6YLxVIh7mMolJ_H-wKazZSKLBK2Y5KNjAZnaGZWUSGtiXiTZf3yF8kYJ/exec"
 
 USER_CREDENTIALS = {
-    "operator1": {"password": "Pa55w.rd", "role": "operator"},
-    "manager1": {"password": "Pa55w.rd", "role": "manager"}
+    "Wendy": {"password": "Pa55w.rd", "role": "operator"},
+    "admin": {"password": "Pa55w.rd", "role": "manager"}
 }
 
 # 2. Helper Functions to Sync data with Google Sheets
@@ -39,7 +39,7 @@ def send_data_to_google(new_row_dict):
     try:
         response = requests.post(GOOGLE_WEB_APP_URL, json=new_row_dict, timeout=10)
         if response.status_code == 200:
-            st.toast("Saved directly to Google Sheets! 💾", icon="✅")
+            st.toast("Line updated successfully in Google Sheets! 💾", icon="✅")
             return True
         else:
             st.error(f"Sync connection returned code: {response.status_code}")
@@ -72,7 +72,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 # Header Panel
-header_col1, header_col2 = st.columns([4, 1])
+header_col1, header_col2 = st.columns()
 with header_col1:
     st.title("🏭 Secure Production & Downtime Dashboard")
     st.caption(f"Logged in as: **{st.session_state.username.upper()}** | Role: **{st.session_state.user_role.capitalize()}**")
@@ -86,12 +86,16 @@ st.divider()
 # Pull live logs from permanent database
 db_df = load_permanent_data()
 
-# Combine cloud records with local session entries dynamically
-if "local_backup" in st.session_state and st.session_state.local_backup:
-    session_df = pd.DataFrame(st.session_state.local_backup)
-    combined_df = pd.concat([session_df, db_df], ignore_index=True).drop_duplicates(subset=["Timestamp", "Line", "Shift", "Logged By"], keep="first")
+# Initialize localized overwrite dictionary if not present
+if "local_line_tracking" not in st.session_state:
+    st.session_state.local_line_tracking = {}
+
+# Merge local updates inside database frame tracking context by keeping latest record per Line
+if st.session_state.local_line_tracking:
+    local_df = pd.DataFrame(st.session_state.local_line_tracking.values())
+    combined_df = pd.concat([local_df, db_df], ignore_index=True).drop_duplicates(subset=["Line"], keep="first")
 else:
-    combined_df = db_df
+    combined_df = db_df.drop_duplicates(subset=["Line"], keep="first")
 
 # 4. Interactive Analytics Panel (Visual Metric Charts)
 if not combined_df.empty:
@@ -140,7 +144,7 @@ if not combined_df.empty:
         fig_group.add_trace(go.Bar(name='Actual Bundles', x=shift_summary['Shift'], y=shift_summary['Actual Bundles'], marker_color='#2ca02c'))
         fig_group.add_trace(go.Bar(name='Expected Target', x=shift_summary['Shift'], y=shift_summary['Expected Bundles'], marker_color='#d62728'))
         
-        fig_group.update_layout(barmode='group', height=350, margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", yanchor="bottom", y=102, xanchor="right", x=1))
+        fig_group.update_layout(barmode='group', height=350, margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         st.plotly_chart(fig_group, use_container_width=True)
         
     st.divider()
@@ -187,17 +191,17 @@ if st.button("Submit & Calculate Data", type="primary"):
             "Downtime Mins": int(downtime_minutes)
         }
         
+        # Send data payload package to Google Sheets (which handles row overwrite internally)
         sync_success = send_data_to_google(new_entry)
         
-        if "local_backup" not in st.session_state:
-            st.session_state.local_backup = []
-        st.session_state.local_backup.append(new_entry)
+        # Update local session tracking data in place using line_name as the distinct dictionary key
+        st.session_state.local_line_tracking[line_name] = new_entry
         
-        st.success("Production metrics calculated and submitted successfully!")
+        st.success(f"Production metrics for Line {line_name} overwritten and updated successfully!")
         st.rerun()
 
 # 6. Continuous Data Ledger
-st.subheader("📊 Live Connected Production Database Ledger")
+st.subheader("📊 Live Connected Production Database Ledger (Latest Line Values)")
 st.dataframe(combined_df, use_container_width=True, hide_index=True)
 
 # Manager Dashboard controls
@@ -218,6 +222,3 @@ if st.session_state.user_role == "manager":
             use_container_width=True
         )
     with act_col2:
-        if st.button("⚠️ Clear Session Ledger Cache", type="secondary", use_container_width=True):
-            st.session_state.local_backup = []
-            st.rerun()
