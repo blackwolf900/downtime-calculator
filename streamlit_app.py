@@ -191,12 +191,8 @@ if st.button("Submit & Calculate Data", type="primary"):
             "Downtime Mins": int(downtime_minutes)
         }
         
-        # Send data payload package to Google Sheets (which handles row overwrite internally)
         sync_success = send_data_to_google(new_entry)
-        
-        # Update local session tracking data in place using line_name as the distinct dictionary key
         st.session_state.local_line_tracking[line_name] = new_entry
-        
         st.success(f"Production metrics for Line {line_name} overwritten and updated successfully!")
         st.rerun()
 
@@ -204,7 +200,7 @@ if st.button("Submit & Calculate Data", type="primary"):
 st.subheader("📊 Live Connected Production Database Ledger (Latest Line Values)")
 st.dataframe(combined_df, use_container_width=True, hide_index=True)
 
-# Manager Dashboard controls
+# 7. Manager Controls (Re-engineered without sub-columns to guarantee no spacing syntax errors)
 if st.session_state.user_role == "manager":
     st.subheader("🔐 Management Administrative Control Panel")
     
@@ -212,13 +208,14 @@ if st.session_state.user_role == "manager":
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         combined_df.to_excel(writer, index=False, sheet_name='Plant Overview Summary')
     
-    act_col1, act_col2 = st.columns(2)
-    with act_col1:
-        st.download_button(
-            label="📥 Download Consolidated Report (.xlsx)",
-            data=buffer.getvalue(),
-            file_name="permanent_production_summary.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-    with act_col2:
+    st.download_button(
+        label="📥 Download Consolidated Report (.xlsx)",
+        data=buffer.getvalue(),
+        file_name="permanent_production_summary.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+    
+    if st.button("⚠️ Clear Session Ledger Cache", type="secondary", use_container_width=True):
+        st.session_state.local_line_tracking = {}
+        st.rerun()
