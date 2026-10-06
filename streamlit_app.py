@@ -73,7 +73,6 @@ if not st.session_state.authenticated:
     st.stop()
 
 # Header Panel
-# Fixed: Pass an integer or an array to define columns layout
 header_col1, header_col2 = st.columns([4, 1])
 with header_col1:
     st.title("🏭 Secure Production & Downtime Dashboard")
@@ -104,7 +103,18 @@ if not combined_df.empty:
     st.subheader("📊 Live Production Performance Metrics")
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-    total_hours = combined_df["Elapsed Hours"].sum()
+    
+    # MODIFIED LOGIC: Find the exact value of the most recently modified entry
+    try:
+        # Convert timestamp strings temporarily to datetime formatting to verify absolute latest record
+        temp_df = combined_df.copy()
+        temp_df["Timestamp_dt"] = pd.to_datetime(temp_df["Timestamp"], errors="coerce")
+        latest_row = temp_df.sort_values(by="Timestamp_dt", ascending=False).iloc[0]
+        last_updated_hours = latest_row["Elapsed Hours"]
+    except Exception:
+        # Fall back gracefully to the first available row parameter if conversion hits issues
+        last_updated_hours = combined_df.iloc[0]["Elapsed Hours"]
+        
     total_actual = combined_df["Actual Bundles"].sum()
     total_expected = combined_df["Expected Bundles"].sum()
     total_downtime = combined_df["Downtime Mins"].sum()
@@ -112,7 +122,8 @@ if not combined_df.empty:
     plant_efficiency = (total_actual / total_expected * 100) if total_expected > 0 else 0
     
     with kpi_col1:
-        st.metric("Total Operational Time", f"{total_hours:.1f} Hrs")
+        # Displays the runtime hour matrix calculation from the absolute latest update
+        st.metric("Total Operational Time", f"{last_updated_hours:.2f} Hrs", help="Reflects the elapsed time from the most recently submitted log entry.")
     with kpi_col2:
         st.metric("Actual Bundles Produced", f"{int(total_actual):,}")
     with kpi_col3:
@@ -202,22 +213,8 @@ if st.button("Submit & Calculate Data", type="primary"):
 st.subheader("📊 Live Connected Production Database Ledger (Latest Line Values)")
 st.dataframe(combined_df, use_container_width=True, hide_index=True)
 
-# 7. Manager Controls (Re-engineered without sub-columns to guarantee no spacing syntax errors)
+# 7. Manager Controls
 if st.session_state.user_role == "manager":
     st.subheader("🔐 Management Administrative Control Panel")
     
     buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        combined_df.to_excel(writer, index=False, sheet_name='Plant Overview Summary')
-    
-    st.download_button(
-        label="📥 Download Consolidated Report (.xlsx)",
-        data=buffer.getvalue(),
-        file_name="permanent_production_summary.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
-    
-    if st.button("⚠️ Clear Session Ledger Cache", type="secondary", use_container_width=True):
-        st.session_state.local_line_tracking = {}
-        st.rerun()
