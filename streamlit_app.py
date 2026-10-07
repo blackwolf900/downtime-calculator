@@ -182,28 +182,4 @@ if not combined_df.empty:
             color_discrete_sequence=px.colors.qualitative.Safe,
             labels={"Downtime Mins": "Downtime (Minutes)", "Line": "Production Line"}
         )
-        fig_bar.update_layout(showlegend=False, height=350, margin=dict(t=20, b=10, l=10, r=10), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_bar, use_container_width=True)
-        
-    with graph_col2:
-        st.markdown("#### 📈 Actual vs. Expected Output by Shift")
-        shift_summary = combined_df.groupby("Shift", as_index=False)[["Actual Bundles", "Expected Bundles"]].sum()
-        fig_group = go.Figure()
-        fig_group.add_trace(go.Bar(name='Actual Units', x=shift_summary['Shift'], y=shift_summary['Actual Bundles'], marker_color='#3b82f6'))
-        fig_group.add_trace(go.Bar(name='Expected Target', x=shift_summary['Shift'], y=shift_summary['Expected Bundles'], marker_color='#cbd5e1'))
-        fig_group.update_layout(barmode='group', height=350, margin=dict(t=20, b=10, l=10, r=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_group, use_container_width=True)
-        
-    st.divider()
-
-# 5. Input Portal Layout (07:30 to 07:30 Shift Window Alignment)
-st.subheader("📥 Log New Shift Performance Data")
-col_input1, col_input2 = st.columns(2, gap="large")
-
-with col_input1:
-    machine_family = st.selectbox("Select Machine Family", options=["Absolut Machines (CP01-CP04)", "Garant Machines (CP05-CP14)"])
-    
-    if "Absolut" in machine_family:
-        line_name = st.selectbox("Select Production Line", options=["CP01", "CP02", "CP03", "CP04"])
-    else:
-        line_name = st.selectbox("Select Production Line", options=[f"CP{i:02d}" for i in range(5, 15)])
+        fig_bar.update_layout(showlegend=False, height=350, margin=dict(t=20, b=10, l=10, r=10), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0
