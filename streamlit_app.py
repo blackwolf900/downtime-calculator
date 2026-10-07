@@ -119,4 +119,68 @@ if not st.session_state.authenticated:
     st.stop()
 
 # Header Panel
-header_col
+header_col1, header_col2 = st.columns([4, 1])
+with header_col1:
+    st.title("🏭 Secure Production & Downtime Dashboard")
+    st.caption(f"Logged in as: **{st.session_state.username.upper()}** | Role: **{st.session_state.user_role.capitalize()}**")
+with header_col2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Log Out", type="secondary", use_container_width=True):
+        st.session_state.authenticated = False
+        st.rerun()
+
+st.divider()
+
+# Pull live logs from permanent database
+db_df = load_permanent_data()
+
+if "local_line_tracking" not in st.session_state:
+    st.session_state.local_line_tracking = {}
+
+if st.session_state.local_line_tracking:
+    local_df = pd.DataFrame(st.session_state.local_line_tracking.values())
+    combined_df = pd.concat([local_df, db_df], ignore_index=True).drop_duplicates(subset=["Line"], keep="first")
+else:
+    combined_df = db_df.drop_duplicates(subset=["Line"], keep="first")
+
+# 4. Interactive Analytics Panel
+if not combined_df.empty:
+    st.subheader("📊 Live Production Performance Metrics")
+    
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    
+    try:
+        temp_df = combined_df.copy()
+        temp_df["Timestamp_dt"] = pd.to_datetime(temp_df["Timestamp"], errors="coerce")
+        latest_row = temp_df.sort_values(by="Timestamp_dt", ascending=False).iloc[0]
+        last_updated_hours = latest_row["Elapsed Hours"]
+    except Exception:
+        last_updated_hours = combined_df.iloc[0]["Elapsed Hours"]
+        
+    total_actual = combined_df["Actual Bundles"].sum()
+    total_expected = combined_df["Expected Bundles"].sum()
+    total_downtime = combined_df["Downtime Mins"].sum()
+    plant_efficiency = (total_actual / total_expected * 100) if total_expected > 0 else 0
+    
+    with kpi_col1:
+        st.metric("Total Operational Time", f"{last_updated_hours:.2f} Hrs")
+    with kpi_col2:
+        st.metric("Actual Units Produced", f"{int(total_actual):,}")
+    with kpi_col3:
+        st.metric("Total Lost Production Time", f"{int(total_downtime):,} Mins", delta=f"{int(total_downtime)} mins delay", delta_color="inverse")
+    with kpi_col4:
+        st.metric("Overall Plant Efficiency", f"{plant_efficiency:.1f}%")
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+    graph_col1, graph_col2 = st.columns(2)
+    
+    with graph_col1:
+        st.markdown("#### ⏳ Accumulated Downtime Minutes by Line")
+        downtime_summary = combined_df.groupby("Line", as_index=False)["Downtime Mins"].sum()
+        fig_bar = px.bar(
+            downtime_summary, x="Line", y="Downtime Mins", text_auto=True, color="Line",
+            color_discrete_sequence=px.colors.qualitative.Safe,
+            labels={"Downtime Mins": "Downtime (Minutes)", "Line": "Production Line"}
+        )
+        fig_bar.update_layout(showlegend=False, height=350, margin=dict(t=20, b=10, l=10, r=10), plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly
