@@ -23,13 +23,21 @@ st.markdown("""
         font-weight: 700 !important;
     }
     
-    /* Card containers for metrics and sections */
+    /* Card containers for metrics */
     div[data-testid="stMetric"] {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
         padding: 16px;
         border-radius: 12px;
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+    }
+    
+    /* Form containers and cards */
+    div.stForm {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
     }
     
     /* Buttons */
@@ -93,7 +101,6 @@ def send_data_to_google(new_row_dict):
         return False
 
 def get_local_timestamp():
-    # Adjusts UTC server time to local plant time using the configured offset
     utc_now = datetime.datetime.utcnow()
     local_now = utc_now + datetime.timedelta(hours=PLANT_UTC_OFFSET_HOURS)
     return local_now.strftime("%Y-%m-%d %H:%M:%S")
@@ -110,8 +117,8 @@ if not st.session_state.authenticated:
     st.markdown("<br><br>", unsafe_allow_html=True)
     col_l1, col_l2, col_l3 = st.columns([1, 1.2, 1])
     with col_l2:
-        st.markdown("<h2 style='text-align: center;'>🏭 Plant Control Login</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #64748b;'>Enter your credentials to access the secure production portal.</p>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>🏭 Plant Control Portal</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #64748b;'>Enter credentials to access secure production operations.</p>", unsafe_allow_html=True)
         with st.form("Login Form"):
             username_input = st.text_input("Username").strip().lower()
             password_input = st.text_input("Password", type="password")
@@ -239,42 +246,56 @@ with col_input1:
     else:
         line_name = st.selectbox("Select Production Line", options=[f"CP{i:02d}" for i in range(5, 15)])
         
-    shift_name = st.selectbox("Select Shift", options=["A", "B", "C", "D"])
+    shift_name = st.selectbox("Select Shift Cycle", options=["Shift A (06:00 - 18:00)", "Shift B (18:00 - 06:00)"])
     actual_bundles = st.number_input("Actual Production Output (Units)", min_value=0, value=10, step=1)
 
 with col_input2:
-    st.markdown("**⏰ Shift Time Range (24-Hour Format)**")
-    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
-    with t_col1:
-        start_hour = st.number_input("From Hour", min_value=0, max_value=23, value=8, step=1)
-    with t_col2:
-        start_min = st.number_input("From Min", min_value=0, max_value=59, value=0, step=1)
-    with t_col3:
-        end_hour = st.number_input("To Hour", min_value=0, max_value=23, value=9, step=1)
-    with t_col4:
-        end_min = st.number_input("To Min", min_value=0, max_value=59, value=0, step=1)
+    st.markdown("**⏰ Shift Time Range (12-Hour Format)**")
+    
+    st.markdown("##### ⏱️ Start Time")
+    s_col1, s_col2, s_col3 = st.columns(3)
+    with s_col1:
+        start_hour = st.number_input("Hour", min_value=1, max_value=12, value=8, step=1)
+    with s_col2:
+        start_min = st.number_input("Minute", min_value=0, max_value=59, value=0, step=1)
+    with s_col3:
+        start_ampm = st.selectbox("AM/PM", options=["AM", "PM"])
+        
+    st.markdown("##### ⏱️ End Time")
+    e_col1, e_col2, e_col3 = st.columns(3)
+    with e_col1:
+        end_hour = st.number_input("To Hour", min_value=1, max_value=12, value=9, step=1)
+    with e_col2:
+        end_min = st.number_input("To Minute", min_value=0, max_value=59, value=0, step=1)
+    with e_col3:
+        end_ampm = st.selectbox("To AM/PM", options=["AM", "PM"])
         
     st.markdown("<br>", unsafe_allow_html=True)
     submit_clicked = st.button("🚀 Submit & Calculate Data", type="primary", use_container_width=True)
 
 if submit_clicked:
-    start_total_mins = (start_hour * 60) + start_min
-    end_total_mins = (end_hour * 60) + end_min
+    # Convert 12-hour format to 24-hour total minutes
+    def to_24hr_mins(hr, mn, ap):
+        h24 = hr % 12
+        if ap == "PM":
+            h24 += 12
+        return (h24 * 60) + mn
+
+    start_total_mins = to_24hr_mins(start_hour, start_min, start_ampm)
+    end_total_mins = to_24hr_mins(end_hour, end_min, end_ampm)
     
-    # Calculate elapsed minutes (handles overnight shifts crossing midnight automatically)
+    # Calculate elapsed minutes (handles cycles crossing midnight correctly)
     elapsed_minutes = end_total_mins - start_total_mins
     if elapsed_minutes < 0:
-        elapsed_minutes += 24 * 60  # Add 24 hours if shift crosses midnight
+        elapsed_minutes += 24 * 60
 
     elapsed_hours_decimal = elapsed_minutes / 60.0
     
     # Apply specific calculations based on Machine Family
     if "Absolut" in machine_family:
-        # Absolut: 1 bundle every 1 minute
         expected_bundles = elapsed_minutes * 1.0
         downtime_minutes = elapsed_minutes - actual_bundles
     else:
-        # Garant: 1 case every 4 minutes
         expected_bundles = elapsed_minutes / 4.0
         downtime_minutes = elapsed_minutes - (actual_bundles * 4.0)
     
@@ -304,25 +325,30 @@ if submit_clicked:
 
 st.divider()
 
-# 6. Continuous Data Ledger
+# 6. Continuous Data Ledger with 12-Hour Shift Separation Tabs
 st.subheader("📊 Live Connected Production Database Ledger")
-st.dataframe(combined_df, use_container_width=True, hide_index=True)
+
+tab_all, tab_shift_a, tab_shift_b = st.tabs(["📋 Complete Master Ledger", "☀️ Shift A Logs (06:00 - 18:00)", "🌙 Shift B Logs (18:00 - 06:00)"])
+
+with tab_all:
+    st.dataframe(combined_df, use_container_width=True, hide_index=True)
+
+with tab_shift_a:
+    if not combined_df.empty and "Shift" in combined_df.columns:
+        df_a = combined_df[combined_df["Shift"].str.contains("Shift A", na=False)]
+        st.dataframe(df_a, use_container_width=True, hide_index=True)
+    else:
+        st.info("No Shift A entries logged yet.")
+
+with tab_shift_b:
+    if not combined_df.empty and "Shift" in combined_df.columns:
+        df_b = combined_df[combined_df["Shift"].str.contains("Shift B", na=False)]
+        st.dataframe(df_b, use_container_width=True, hide_index=True)
+    else:
+        st.info("No Shift B entries logged yet.")
 
 # 7. Manager Controls
 if st.session_state.user_role == "manager":
     st.divider()
     st.subheader("🔐 Management Administrative Control Panel")
     st.caption("Manager-exclusive tools for data extraction and operational auditing.")
-    
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        combined_df.to_excel(writer, index=False, sheet_name='Production Log')
-    buffer.seek(0)
-    
-    st.download_button(
-        label="📥 Download Full Production Report (Excel)",
-        data=buffer,
-        file_name=f"production_report_{datetime.date.today()}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        type="primary"
-    )
