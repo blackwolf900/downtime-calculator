@@ -290,14 +290,4 @@ st.subheader("📊 Live Connected Production Database Ledger")
 tab_all, tab_shift_a, tab_shift_b = st.tabs(["📋 Complete Master Ledger", "☀️ Shift A Logs (07:30 - 19:30)", "🌙 Shift B Logs (19:30 - 07:30)"])
 
 with tab_all:
-    st.dataframe(combined_df, use_container_width=True, hide_index=True)
-
-with tab_shift_a:
-    if not combined_df.empty and "Shift" in combined_df.columns:
-        df_a = combined_df[combined_df["Shift"].str.contains("Shift A", na=False)]
-        st.dataframe(df_a, use_container_width=True, hide_index=True)
-    else:
-        st.info("No Shift A entries logged yet.")
-
-with tab_shift_b:
-    if not combined
+    st.dataframe(combined_df, use_container_width
