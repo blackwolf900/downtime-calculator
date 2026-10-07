@@ -121,7 +121,7 @@ if not combined_df.empty:
     with kpi_col1:
         st.metric("Total Operational Time", f"{last_updated_hours:.2f} Hrs", help="Reflects the elapsed time from the most recently submitted log entry.")
     with kpi_col2:
-        st.metric("Actual Bundles Produced", f"{int(total_actual):,}")
+        st.metric("Actual Units Produced", f"{int(total_actual):,}")
     with kpi_col3:
         st.metric("Total Lost Production Time", f"{int(total_downtime):,} Mins", delta=f"{int(total_downtime)} mins delay", delta_color="inverse")
     with kpi_col4:
@@ -146,11 +146,11 @@ if not combined_df.empty:
         st.plotly_chart(fig_bar, use_container_width=True)
         
     with graph_col2:
-        st.markdown("#### 📈 Actual vs. Expected Production Bundles by Shift")
+        st.markdown("#### 📈 Actual vs. Expected Production by Shift")
         shift_summary = combined_df.groupby("Shift", as_index=False)[["Actual Bundles", "Expected Bundles"]].sum()
         
         fig_group = go.Figure()
-        fig_group.add_trace(go.Bar(name='Actual Bundles', x=shift_summary['Shift'], y=shift_summary['Actual Bundles'], marker_color='#2ca02c'))
+        fig_group.add_trace(go.Bar(name='Actual Units', x=shift_summary['Shift'], y=shift_summary['Actual Bundles'], marker_color='#2ca02c'))
         fig_group.add_trace(go.Bar(name='Expected Target', x=shift_summary['Shift'], y=shift_summary['Expected Bundles'], marker_color='#d62728'))
         
         fig_group.update_layout(barmode='group', height=350, margin=dict(t=10, b=10, l=10, r=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
@@ -163,9 +163,15 @@ st.subheader("📥 Log New Shift Performance Data")
 col_input1, col_input2 = st.columns(2)
 
 with col_input1:
-    line_name = st.selectbox("Select Production Line", options=["CP01", "CP02", "CP03", "CP04"])
+    machine_family = st.selectbox("Select Machine Family", options=["Absolut Machines (CP01-CP04)", "Garant Machines (CP05-CP14)"])
+    
+    if "Absolut" in machine_family:
+        line_name = st.selectbox("Select Production Line", options=["CP01", "CP02", "CP03", "CP04"])
+    else:
+        line_name = st.selectbox("Select Production Line", options=[f"CP{i:02d}" for i in range(5, 15)])
+        
     shift_name = st.selectbox("Select Shift", options=["A", "B", "C", "D"])
-    actual_bundles = st.number_input("Actual Bundles Produced", min_value=0, value=10, step=1)
+    actual_bundles = st.number_input("Actual Production Output (Bundles/Cases)", min_value=0, value=10, step=1)
 
 with col_input2:
     st.markdown("**⏰ Shift Time Range (24-Hour Format)**")
@@ -189,14 +195,22 @@ if st.button("Submit & Calculate Data", type="primary"):
         elapsed_minutes += 24 * 60  # Add 24 hours if shift crosses midnight
 
     elapsed_hours_decimal = elapsed_minutes / 60.0
-    expected_bundles = elapsed_minutes * 1.0
+    
+    # Apply specific calculations based on Machine Family
+    if "Absolut" in machine_family:
+        # Absolut: 1 bundle every 1 minute
+        expected_bundles = elapsed_minutes * 1.0
+        downtime_minutes = elapsed_minutes - actual_bundles
+    else:
+        # Garant: 1 case every 4 minutes
+        expected_bundles = elapsed_minutes / 4.0
+        downtime_minutes = elapsed_minutes - (actual_bundles * 4.0)
     
     if actual_bundles > expected_bundles:
-        st.error(f"❌ Error: Actual bundles ({actual_bundles}) exceed capacity for this timeframe.")
+        st.error(f"❌ Error: Actual production ({actual_bundles}) exceeds maximum expected capacity ({expected_bundles:.1f}) for this timeframe.")
     elif elapsed_minutes == 0:
         st.error("❌ Error: Total elapsed runtime cannot be zero.")
     else:
-        downtime_minutes = elapsed_minutes - actual_bundles
         current_time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         new_entry = {
@@ -207,13 +221,13 @@ if st.button("Submit & Calculate Data", type="primary"):
             "Elapsed Hours": round(elapsed_hours_decimal, 2),
             "Elapsed Mins": int(elapsed_minutes),
             "Actual Bundles": int(actual_bundles),
-            "Expected Bundles": int(expected_bundles),
-            "Downtime Mins": int(downtime_minutes)
+            "Expected Bundles": round(expected_bundles, 2),
+            "Downtime Mins": int(max(0, downtime_minutes))
         }
         
         sync_success = send_data_to_google(new_entry)
         st.session_state.local_line_tracking[line_name] = new_entry
-        st.success(f"Production metrics for Line {line_name} overwritten and updated successfully!")
+        st.success(f"Production metrics for Line {line_name} ({machine_family.split()[0]}) updated successfully!")
         st.rerun()
 
 # 6. Continuous Data Ledger
