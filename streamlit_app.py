@@ -208,7 +208,7 @@ with col_input1:
     else:
         line_name = st.selectbox("Select Production Line", options=[f"CP{i:02d}" for i in range(5, 15)])
         
-    shift_name = st.selectbox("Select 12-Hour Shift Cycle", options=["Shift A (07:30 - 19:30)", "Shift B (19:30 - 07:30)"])
+    shift_name = st.selectbox("Select 12-Hour Shift Cycle", options=["Shift A (07:30 - 19:30)", "Shift B (19:30 - 07:30)", "Shift C (19:30 - 07:30)", "Shift D (19:30 - 07:30)"])
     actual_bundles = st.number_input("Actual Production Output (Units)", min_value=0, value=10, step=1)
 
 with col_input2:
