@@ -238,7 +238,7 @@ else:
     line_name = st.selectbox("Select Production Line", options=[f"CP{i:02d}" for i in range(5, 15)])
     
 shift_name = st.selectbox("Select 12-Hour Shift Cycle", options=["Shift A (07:30 - 19:30)", "Shift B (19:30 - 07:30)"])
-actual_bundles = st.number_input("Actual Production Output (Units)", min_value=0, value=10, step=1)
+actual_bundles = st.number_input("Actual Production Output (Units/Cases)", min_value=0, value=10, step=1)
 
 st.markdown("**⏰ Shift Operational Window (07:30 to 07:30)**")
 
@@ -279,10 +279,13 @@ if submit_clicked:
 
     elapsed_hours_decimal = elapsed_minutes / 60.0
     
+    # Corrected calculations based on Machine Family
     if "Absolut" in machine_family:
+        # Absolut: 1 bundle every 1 minute
         expected_bundles = elapsed_minutes * 1.0
         downtime_minutes = elapsed_minutes - actual_bundles
     else:
+        # Garant: 1 case every 4 minutes (e.g., 60 mins / 4 = 15 cases expected)
         expected_bundles = elapsed_minutes / 4.0
         downtime_minutes = elapsed_minutes - (actual_bundles * 4.0)
     
