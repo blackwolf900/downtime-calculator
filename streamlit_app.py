@@ -104,15 +104,12 @@ if not combined_df.empty:
     
     kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
     
-    # MODIFIED LOGIC: Find the exact value of the most recently modified entry
     try:
-        # Convert timestamp strings temporarily to datetime formatting to verify absolute latest record
         temp_df = combined_df.copy()
         temp_df["Timestamp_dt"] = pd.to_datetime(temp_df["Timestamp"], errors="coerce")
         latest_row = temp_df.sort_values(by="Timestamp_dt", ascending=False).iloc[0]
         last_updated_hours = latest_row["Elapsed Hours"]
     except Exception:
-        # Fall back gracefully to the first available row parameter if conversion hits issues
         last_updated_hours = combined_df.iloc[0]["Elapsed Hours"]
         
     total_actual = combined_df["Actual Bundles"].sum()
@@ -122,7 +119,6 @@ if not combined_df.empty:
     plant_efficiency = (total_actual / total_expected * 100) if total_expected > 0 else 0
     
     with kpi_col1:
-        # Displays the runtime hour matrix calculation from the absolute latest update
         st.metric("Total Operational Time", f"{last_updated_hours:.2f} Hrs", help="Reflects the elapsed time from the most recently submitted log entry.")
     with kpi_col2:
         st.metric("Actual Bundles Produced", f"{int(total_actual):,}")
@@ -169,18 +165,29 @@ col_input1, col_input2 = st.columns(2)
 with col_input1:
     line_name = st.selectbox("Select Production Line", options=["CP01", "CP02", "CP03", "CP04"])
     shift_name = st.selectbox("Select Shift", options=["A", "B", "C", "D"])
-
-with col_input2:
-    time_col1, time_col2 = st.columns(2)
-    with time_col1:
-        input_hours = st.number_input("Elapsed Hours", min_value=0, value=1, step=1)
-    with time_col2:
-        input_minutes = st.number_input("Elapsed Minutes", min_value=0, max_value=59, value=0, step=1)
-        
     actual_bundles = st.number_input("Actual Bundles Produced", min_value=0, value=10, step=1)
 
+with col_input2:
+    st.markdown("**⏰ Shift Time Range (24-Hour Format)**")
+    t_col1, t_col2, t_col3, t_col4 = st.columns(4)
+    with t_col1:
+        start_hour = st.number_input("From Hour", min_value=0, max_value=23, value=8, step=1)
+    with t_col2:
+        start_min = st.number_input("From Min", min_value=0, max_value=59, value=0, step=1)
+    with t_col3:
+        end_hour = st.number_input("To Hour", min_value=0, max_value=23, value=9, step=1)
+    with t_col4:
+        end_min = st.number_input("To Min", min_value=0, max_value=59, value=0, step=1)
+
 if st.button("Submit & Calculate Data", type="primary"):
-    elapsed_minutes = (input_hours * 60) + input_minutes
+    start_total_mins = (start_hour * 60) + start_min
+    end_total_mins = (end_hour * 60) + end_min
+    
+    # Calculate elapsed minutes (handles overnight shifts crossing midnight automatically)
+    elapsed_minutes = end_total_mins - start_total_mins
+    if elapsed_minutes < 0:
+        elapsed_minutes += 24 * 60  # Add 24 hours if shift crosses midnight
+
     elapsed_hours_decimal = elapsed_minutes / 60.0
     expected_bundles = elapsed_minutes * 1.0
     
@@ -215,6 +222,19 @@ st.dataframe(combined_df, use_container_width=True, hide_index=True)
 
 # 7. Manager Controls
 if st.session_state.user_role == "manager":
+    st.divider()
     st.subheader("🔐 Management Administrative Control Panel")
+    st.caption("Manager-exclusive tools for data extraction and operational auditing.")
     
     buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        combined_df.to_excel(writer, index=False, sheet_name='Production Log')
+    buffer.seek(0)
+    
+    st.download_button(
+        label="📥 Download Full Production Report (Excel)",
+        data=buffer,
+        file_name=f"production_report_{datetime.date.today()}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type="primary"
+    )
